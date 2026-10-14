@@ -1,100 +1,64 @@
-from flask import Flask, request, jsonify, render_template_string
-import sqlite3
+from flask import Flask, jsonify
 
 app = Flask(__name__)
 
-# Database setup
-def init_db():
-    with sqlite3.connect('movies.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS reviews (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                movie_title TEXT NOT NULL,
-                review TEXT NOT NULL
-            )
-        ''')
-        conn.commit()
+# Sample data for practical examination purposes.
+STUDENTS = {
+    "101": {"name": "Aarav Shah", "python": 78, "mathematics": 82, "devops": 91},
+    "102": {"name": "Diya Patil", "python": 67, "mathematics": 73, "devops": 69},
+    "103": {"name": "Kabir Joshi", "python": 28, "mathematics": 45, "devops": 32},
+}
 
-@app.route('/')
-def index():
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Movie Review System</title>
-    </head>
-    <body>
-        <h1>Movie Review System</h1>
-        <form id="reviewForm">
-            <input type="text" id="movie_title" placeholder="Movie Title" required>
-            <textarea id="review" placeholder="Your Review" required></textarea>
-            <button type="submit">Submit Review</button>
-        </form>
-        <h2>Reviews</h2>
-        <ul id="reviewsList"></ul>
+PASS_MARK = 35
 
-        <script>
-            document.getElementById('reviewForm').addEventListener('submit', function(event) {
-                event.preventDefault();
-                const movieTitle = document.getElementById('movie_title').value;
-                const review = document.getElementById('review').value;
 
-                fetch('/reviews', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ movie_title: movieTitle, review: review })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    console.log(data);
-                    loadReviews();
-                });
-            });
+def calculate_result(student):
+    """Return total, percentage, and pass/fail status for a student's marks."""
+    marks = [student["python"], student["mathematics"], student["devops"]]
+    total = sum(marks)
+    percentage = round(total / len(marks), 2)
+    status = "PASS" if all(mark >= PASS_MARK for mark in marks) else "FAIL"
 
-            function loadReviews() {
-                fetch('/reviews')
-                    .then(response => response.json())
-                    .then(data => {
-                        const reviewsList = document.getElementById('reviewsList');
-                        reviewsList.innerHTML = '';
-                        data.forEach(review => {
-                            const li = document.createElement('li');
-                            li.textContent = `${review[1]}: ${review[2]}`;
-                            reviewsList.appendChild(li);
-                        });
-                    });
-            }
+    return {
+        "total": total,
+        "percentage": percentage,
+        "status": status,
+    }
 
-            loadReviews();
-        </script>
-    </body>
-    </html>
-    ''')
 
-@app.route('/reviews', methods=['GET', 'POST'])
-def reviews():
-    if request.method == 'POST':
-        data = request.get_json()
-        movie_title = data['movie_title']
-        review = data['review']
-        with sqlite3.connect('movies.db') as conn:
-            cursor = conn.cursor()
-            cursor.execute('INSERT INTO reviews (movie_title, review) VALUES (?, ?)', (movie_title, review))
-            conn.commit()
-        return jsonify({'message': 'Review added!'}), 201
+@app.get("/")
+def home():
+    return jsonify({
+        "application": "Student Result Management System",
+        "message": "Use /results/<roll_number> to view a student's result.",
+        "sample_roll_numbers": list(STUDENTS.keys()),
+    })
 
-    elif request.method == 'GET':
-        with sqlite3.connect('movies.db') as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM reviews')
-            reviews = cursor.fetchall()
-            return jsonify(reviews)
 
-if __name__ == '__main__':
-    init_db()
-    app.run(debug=True)
+@app.get("/health")
+def health():
+    return jsonify({"status": "healthy"}), 200
+
+
+@app.get("/results/<roll_number>")
+def get_result(roll_number):
+    student = STUDENTS.get(roll_number)
+    if student is None:
+        return jsonify({"error": "Student roll number not found"}), 404
+
+    result = calculate_result(student)
+    response = {
+        "roll_number": roll_number,
+        "name": student["name"],
+        "marks": {
+            "python": student["python"],
+            "mathematics": student["mathematics"],
+            "devops": student["devops"],
+        },
+        **result,
+    }
+    return jsonify(response), 200
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=False)
